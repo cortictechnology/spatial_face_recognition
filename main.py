@@ -25,9 +25,12 @@ class SpatialFaceRecognizer:
         self.show_lm = show_lm
         self.ag_path = ag_path
         self.fr_path = fr_path
-        self.database_location = "./database"
+        self.database_location = "./database/"
 
         self.add_new_face = False
+        self.adding_face = False
+        self.new_person_name = ""
+        self.new_face_count = 0
 
         self.preview_width = 455
         self.preview_height = 256
@@ -43,7 +46,7 @@ class SpatialFaceRecognizer:
             [70.7299, 92.2041]], dtype=np.float32)
         self.ref_landmarks = np.expand_dims(self.ref_landmarks, axis=0)
 
-        self.face_database = {"Names": [], "Features": None}
+        self.face_database = {"Names": [], "Features": []}
 
         self.device = dai.Device(self.create_pipeline())
         self.device.startPipeline()
@@ -179,23 +182,14 @@ class SpatialFaceRecognizer:
                 for file in os.listdir(item):
                     if file.endswith(".bin"):
                         try:
-                            feature = np.fromfile(item+"/features.bin", np.float32)
+                            feature = np.fromfile(item+"/"+file, np.float32)
                             self.face_database["Names"].append(dir)
-                            if self.face_database["Features"] is None:
-                                self.face_database["Features"] = feature
+                            if len(self.face_database["Features"]) < len(self.face_database["Names"]):
+                                self.face_database["Features"].append(feature)
                             else:
-                                self.face_database["Features"] = np.vstack((self.face_database["Features"], feature))
+                                self.face_database["Features"][-1] = np.vstack((self.face_database["Features"][-1], feature))
                         except:
                             continue
-
-
-    def get_best_match_identity(self, similarity_scores, threshold=0.81):
-        sort_idx = np.argsort(-similarity_scores)
-        #print(sort_idx)
-        if similarity_scores[sort_idx[0]] >= threshold:
-            return self.face_database["Names"][sort_idx[0]]
-        else:
-            return "Unknown"
 
 
     def get_age_gender(self, aligned_face):
@@ -275,13 +269,22 @@ class SpatialFaceRecognizer:
                 aligned_face = norm_crop(video_frame, face_landmarks, self.ref_landmarks)
                 face_features = self.get_face_features(aligned_face)
 
-                if len(self.face_database["Names"]) > 0:
-                    similarity = np.dot(self.face_database["Features"], face_features.T).squeeze()
+                best_match_name = ""
+                best_match_confidence = 0.7
+                for i in range(len(self.face_database["Names"])):
+                    name = self.face_database["Names"][i]
+                    features = self.face_database["Features"][i]
+                    similarity = np.dot(features, face_features.T).squeeze()
                     if not isinstance(similarity, np.ndarray):
                         similarity = np.array([similarity])
-                    # Perform some nolinear scaling to the similarity
                     similarity = 1.0 / (1 + np.exp(-1 * (similarity - 0.38) * 10))
-                    person_name = self.get_best_match_identity(similarity)
+                    highest_similarity = np.amax(similarity)
+                    if highest_similarity > best_match_confidence:
+                        best_match_name = name
+                        best_match_confidence = highest_similarity
+
+                if best_match_name != "":
+                    person_name = best_match_name
                 
                 if person_name == "Unknown":
                     if self.show_lm:
@@ -302,21 +305,33 @@ class SpatialFaceRecognizer:
                     textSize = self.ft.getTextSize(name_text, fontHeight=14, thickness=-1)[0]
                     cv2.rectangle(annotated_frame, (x_center - textSize[0] // 2 - 5, y1 - 5), (x_center - textSize[0] // 2 + textSize[0] + 5, y1 - 22), COLOR[1], -1)
                     self.ft.putText(img=annotated_frame, text=name_text , org=(x_center - textSize[0] // 2, y1 - 8), fontHeight=14, color=(255, 255, 255), thickness=-1, line_type=cv2.LINE_AA, bottomLeftOrigin=True)
-                    
+
                 if person_name == "Unknown" and self.add_new_face:
                     if self.database_location != "":
                         name = input("Please enter your name: ")
                         os.mkdir(self.database_location + "/" + name)
-                        cv2.imwrite(self.database_location + name + "/photo.jpg", video_frame)
-                        face_features.tofile(self.database_location + name + "/features.bin")
+                        self.adding_face = True
+                        self.new_person_name = name
                         self.face_database["Names"].append(name)
-                        if self.face_database["Features"] is None:
-                            self.face_database["Features"] = face_features
-                        else:
-                            self.face_database["Features"] = np.vstack((self.face_database["Features"], face_features))
                     else:
                         print("Run the program with a database location first!")
                     self.add_new_face = False
+
+                if self.adding_face:
+                    if self.new_face_count < 60:
+                        if self.new_face_count % 5 == 0:
+                            cv2.imwrite(self.database_location + name + "/photo_" + str(int(self.new_face_count/4)) + ".jpg", video_frame)
+                            face_features.tofile(self.database_location + name + "/features_" + str(self.new_face_count/4) + ".bin")
+                            if len(self.face_database["Features"]) < len(self.face_database["Names"]):
+                               self.face_database["Features"].append(face_features)
+                            else:
+                               self.face_database["Features"][-1] = np.vstack((self.face_database["Features"][-1], face_features))
+                        self.new_face_count += 1
+                    else:
+                        self.adding_face = False
+                        self.new_face_count = 0
+                        self.new_person_name = ""
+                        print("Done adding face")
                 
             cv2.imshow("Spatial Face Recognition", annotated_frame)
 
