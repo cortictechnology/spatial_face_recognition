@@ -31,7 +31,8 @@ We have included some sample celebrities in the database, you can follow the nex
 1. When the program is running, look into the camera with your front face.
 2. Press the "a" key on the keyboard.
 3. In the terminal, enter your name and press Enter.
-4. You should see yourself being recognized.
+4. Now move your head around to capture different angles of your face.
+5. You should see yourself being recognized.
 
 ## Model description
 
