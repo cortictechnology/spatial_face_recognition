@@ -1,6 +1,6 @@
 # Face Detection, face recognition, age and gender estimation with spatial information
 
-This is the source code of the article:
+This is the source code of the article: [Importance of Accurate Facial Landmarks](https://www.cortic.ca/post/importance-of-accurate-facial-landmarks)
 
 ## Install dependencies
 
